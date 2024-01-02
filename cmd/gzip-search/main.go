@@ -1,9 +1,8 @@
 package main
 
 import (
-	"bytes"
-	"compress/gzip"
 	"fmt"
+	"ml-experiments/common"
 	"slices"
 	"sync"
 )
@@ -40,40 +39,19 @@ var testSet = []string{
 	"From Ancient Remedies to Modern Healthcare: Evolution of Medicine",
 }
 
-func dist(a, b string) float64 {
-	lenA := getEncodeLen(a)
-	lenB := getEncodeLen(b)
-	cx := getEncodeLen(a + b)
-	dist := (cx - min(lenA, lenB)) / max(lenA, lenB)
-	return dist
-}
-
-func getEncodeLen(s string) float64 {
-	buf := new(bytes.Buffer)
-	writer := gzip.NewWriter(buf)
-	writer.Write([]byte(s))
-	writer.Close()
-	return float64(buf.Len())
-}
-
-type entry struct {
-	dist float64
-	q    string
-}
-
 func main() {
 	for _, s := range testSet {
-		var distances []entry = make([]entry, len(trainingSet))
+		var distances = make([]common.Entry, len(trainingSet))
 
 		var wg sync.WaitGroup
 
 		for i, q := range trainingSet {
 			wg.Add(1)
 			go func(i int, q string) {
-				dist := dist(s, q)
-				e := entry{
-					dist: dist,
-					q:    q,
+				dist := common.GzipDistance(s, q)
+				e := common.Entry{
+					Dist: dist,
+					Q:    q,
 				}
 				distances[i] = e
 				wg.Done()
@@ -82,17 +60,17 @@ func main() {
 
 		wg.Wait()
 
-		slices.SortFunc(distances, func(lhs, rhs entry) int {
-			if lhs.dist > rhs.dist {
+		slices.SortFunc(distances, func(lhs, rhs common.Entry) int {
+			if lhs.Dist > rhs.Dist {
 				return 1
 			}
-			if lhs.dist < rhs.dist {
+			if lhs.Dist < rhs.Dist {
 				return -1
 			}
 			return 0
 		})
 
-		fmt.Printf("input: %s, output: %s\n", s, distances[0].q)
-		fmt.Printf("distances: %v\n\n", distances)
+		fmt.Printf("\ninput: %s, output: %s\n", s, distances[0].Q)
+		fmt.Printf("distances: %v\n", distances)
 	}
 }

@@ -2,80 +2,95 @@ package main
 
 import (
 	"strings"
-	"unicode"
+
+	"github.com/aaaton/golem/v4"
 )
 
 type Document struct {
-	data []string
+	ID      int
+	Title   string
+	Summary string
 }
 
-func NewDocument(line string) *Document {
+func NewDocument(id int, line string) *Document {
 	parts := strings.Split(line, "|||")
-	title := strings.ToLower(strings.TrimSpace(parts[0]))
-	summary := strings.ToLower(strings.TrimSpace(parts[1]))
+	title := strings.TrimSpace(parts[0])
+	summary := strings.TrimSpace(parts[1])
 
 	return &Document{
-		data: []string{title, summary},
+		ID:      id,
+		Title:   title,
+		Summary: summary,
 	}
-}
-
-func (doc *Document) Title() string {
-	return doc.data[0]
-}
-
-func (doc *Document) Summary() string {
-	return doc.data[1]
 }
 
 type DocumentIndex struct {
-	tf map[string]int
+	ID         int
+	Tokens     map[string]int
+	TF         map[string]float64
+	TokenCount int
 }
 
-func ParseDocument(doc *Document) *DocumentIndex {
-	tf := map[string]int{}
+func ParseDocument(lemmatizer *golem.Lemmatizer, id int, dataset string, punctuation, stopList []string) *DocumentIndex {
+	tokens := map[string]int{}
 
-	var acc []rune
-	summary := []rune(doc.Summary())
+	words := processDataset(lemmatizer, dataset, punctuation, stopList)
 
-	for i := 0; i < len(summary); i++ {
-		if summary[i] == rune('(') {
+	for _, w := range words {
+		if len(w) == 0 {
 			continue
 		}
-		if summary[i] == rune(')') {
-			continue
-		}
-
-		if summary[i] == rune(',') {
-			continue
-		}
-
-		if summary[i] == rune('"') {
-			continue
-		}
-
-		if summary[i] == rune('-') {
-			tf[string(acc)] += tf[string(acc)] + 1
-			acc = nil
-			continue
-		}
-
-		acc = append(acc, summary[i])
-		if unicode.IsSpace(summary[i]) {
-			if string(acc) == "..." {
-				acc = nil
-				continue
-			}
-
-			tf[string(acc)] += tf[string(acc)] + 1
-			acc = nil
-		}
+		tokens[w]++
 	}
 
-	if len(acc) > 0 {
-		tf[string(acc)] += tf[string(acc)] + 1
+	count := len(words)
+
+	tf := map[string]float64{}
+
+	for k, v := range tokens {
+		tf[k] = float64(v) / float64(count)
 	}
 
 	return &DocumentIndex{
-		tf: tf,
+		ID:         id,
+		Tokens:     tokens,
+		TF:         tf,
+		TokenCount: count,
 	}
+}
+
+func processDataset(lemmatizer *golem.Lemmatizer, data string, punctuation, stopList []string) []string {
+	// to lowercase
+	data = strings.ToLower(data)
+
+	// remove punctuation
+	for _, p := range punctuation {
+		data = strings.ReplaceAll(data, p, " ")
+	}
+
+	acc := []string{}
+
+	stopListTable := map[string]struct{}{}
+	for _, s := range stopList {
+		stopListTable[s] = struct{}{}
+	}
+
+	// remove stop words
+	for _, x := range strings.Split(data, " ") {
+		x = strings.TrimSpace(x)
+
+		if _, ok := stopListTable[x]; ok {
+			continue
+		}
+
+		for _, p := range punctuation {
+			x = strings.ReplaceAll(x, p, " ")
+		}
+
+		// lemmatize
+		w := lemmatizer.LemmaLower(x)
+		acc = append(acc, w)
+	}
+
+	return acc
 }
